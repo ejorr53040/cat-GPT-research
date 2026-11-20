@@ -1,0 +1,106 @@
+%% Proposed deployment: fine-tuned gpt-oss-120b on VACC (vLLM) behind a Flask API-key gateway.
+%% Source of truth for architecture.excalidraw. Facts and citations: README.md and the three notes.
+flowchart LR
+  subgraph OUT["Outside"]
+    CL["API clients<br/>openai SDK, base_url=gateway"]
+    HF["Hugging Face Hub<br/>Docker Hub (vllm-openai)"]
+    APR["UVM approvals<br/>iso@ / vacchelp@ / saa@"]
+  end
+
+  subgraph CAMPUS["UVM campus host: ETS research VM or Silk"]
+    NG{{"nginx :443 TLS<br/>X-Accel-Buffering: no"}}
+    GU["gunicorn 127.0.0.1:8080<br/>gthread or gevent workers"]
+    FG["Flask gateway<br/>HMAC key check, allowlist,<br/>quotas, cache_salt, caps"]
+    KS[("API key store<br/>HMAC-SHA256 hashes")]
+    SEC[("secrets<br/>pepper, vLLM shared key")]
+    TUN["ssh -N -L tunnel<br/>127.0.0.1:18000"]
+  end
+
+  subgraph VACC["VACC"]
+    LOGIN{{"login.vacc.uvm.edu :22<br/>jump host only"}}
+    SLURM["Slurm nvgpu, 48 h max<br/>relay: dependency after+2820"]
+    subgraph NODE["GPU node, Slurm job (H200)"]
+      APP["Apptainer --nv -e<br/>vllm/vllm-openai v0.33.0"]
+      VL["vllm serve<br/>MXFP4 base + LoRA, TP1"]
+      UDS{{"--uds socket<br/>in 0700 dir"}}
+      TMP[("per-job /tmp, /dev/shm<br/>wiped at job end")]
+    end
+    subgraph GPFS["GPFS"]
+      W[("/gpfs1/pi/PI<br/>weights, adapter, SIF,<br/>hf cache, tiktoken")]
+      SC[("scratch<br/>vllm + apptainer caches")]
+    end
+  end
+
+  FT{"fine-tune format?"}
+  G1["1x H200 TP1<br/>LoRA or QAT-MXFP4"]
+  G4["4x H200 TP4<br/>BF16 merged, 234 GB"]
+
+  CL == "HTTPS + Bearer user key" ==> NG
+  NG == "HTTP/1.1 SSE proxy" ==> GU
+  GU ==> FG
+  FG -- "lookup hash" --> KS
+  FG -- "read" --> SEC
+  FG == "HTTP+JSON SSE, vLLM key" ==> TUN
+  TUN == "ssh -J jump" ==> LOGIN
+  LOGIN == "ssh -L to socket" ==> UDS
+  UDS ==> VL
+  APP --> VL
+  SLURM -- "sbatch starts job" --> APP
+  VL -- "load at start, offline" --> W
+  VL -- "compile cache" --> SC
+  VL --> TMP
+  HF -. "staged on login node" .-> W
+  FG -. "alt: direct route, if VACC opens" .-> VL
+  APR -. "approval gates launch" .-> CAMPUS
+  FT --> G1
+  FT -.-> G4
+  G1 -- "sets --gpus / --constraint" --> SLURM
+
+  %% Component guide: what each piece does, with its primary docs as the box's link.
+  subgraph GUIDE["Component guide: click a box's link icon for its docs"]
+    direction TB
+    K1["openai SDK (client code)<br/>base_url = gateway URL<br/>sends Bearer user key"]
+    K2["nginx<br/>TLS on :443, reverse proxy<br/>proxy_buffering off for SSE"]
+    K3["gunicorn<br/>WSGI server running Flask<br/>gthread/gevent for streams"]
+    K4["Flask gateway (our code)<br/>auth, allowlist, quotas<br/>stream_with_context proxy"]
+    K5[("API key store<br/>HMAC-SHA256(pepper, key)<br/>hmac.compare_digest")]
+    K6["httpx (inside gateway)<br/>streams vLLM SSE upstream<br/>no retries, long timeout"]
+    K7["ssh -L tunnel<br/>gateway port to vLLM socket<br/>-J login.vacc.uvm.edu"]
+    K8["Slurm on VACC (nvgpu)<br/>allocates the H200, 48 h max<br/>--constraint GPU_SKU:H200"]
+    K9["Apptainer --nv<br/>runs vllm/vllm-openai image<br/>(VACC has no Docker)"]
+    K10["vllm serve<br/>OpenAI-compatible API<br/>batches requests on GPU"]
+    K11["vLLM --api-key<br/>gateway-to-vLLM secret only<br/>not user auth; /v1 only"]
+    K12["LoRA adapter (our fine-tune)<br/>--enable-lora --lora-modules<br/>clients send model=catgpt"]
+    K13["gpt-oss-120b base<br/>MXFP4 MoE, harmony format<br/>reasoning effort low-high"]
+    K14[("GPFS /gpfs1/pi/PI<br/>weights, SIF, HF cache<br/>HF_HUB_OFFLINE=1 in job")]
+    K1 --> K2 --> K3 --> K4 --> K6 --> K7 --> K10
+    K4 --> K5
+    K8 --> K9 --> K10
+    K11 --> K10
+    K12 --> K10
+    K13 --> K10
+    K14 --> K13
+  end
+
+  click K1 href "https://github.com/openai/openai-python"
+  click K2 href "https://nginx.org/en/docs/http/ngx_http_proxy_module.html"
+  click K3 href "https://github.com/benoitc/gunicorn/blob/27.0.1/docs/content/design.md"
+  click K4 href "https://flask.palletsprojects.com/en/stable/patterns/streaming/"
+  click K5 href "https://docs.python.org/3/library/hmac.html"
+  click K6 href "https://www.python-httpx.org/quickstart/"
+  click K7 href "https://man.openbsd.org/ssh.1"
+  click K8 href "https://www.uvm.edu/vacc/docs/beyond_basics/gpu_features/"
+  click K9 href "https://apptainer.org/docs/user/1.3/gpu.html"
+  click K10 href "https://docs.vllm.ai/en/v0.33.0/serving/openai_compatible_server/"
+  click K11 href "https://docs.vllm.ai/en/v0.33.0/usage/security/"
+  click K12 href "https://docs.vllm.ai/en/v0.33.0/features/lora/"
+  click K13 href "https://huggingface.co/openai/gpt-oss-120b"
+  click K14 href "https://www.uvm.edu/vacc/docs/start_guide/data_and_storage/"
+
+  style OUT fill:#f1f3f5
+  style CAMPUS fill:#e7f5ff
+  style VACC fill:#fff4e6
+  style NODE fill:#ffe8cc
+  style GPFS fill:#f8f0fc
+  style FT fill:#fff9db
+  style GUIDE fill:#ebfbee
