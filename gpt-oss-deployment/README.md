@@ -6,7 +6,7 @@ Compiled 2026-11-13 from primary sources. This page indexes four notes and pulls
 | --- | --- |
 | [../vacc/serving-an-llm.md](../vacc/serving-an-llm.md) | VACC/UVM policy, networking, the 48 h walltime, hosting alternatives, CU cost, data classification, draft email to vacchelp |
 | [vllm-gpt-oss-120b.md](vllm-gpt-oss-120b.md) | Model facts, memory sizing, kernels per VACC GPU, fine-tune formats, `vllm serve` flags, Apptainer, sbatch sketch |
-| [test-box.md](test-box.md) | Local RTX 3080 test box (2026-11-20): Rocky 9, NVIDIA driver, Apptainer 1.3.4, vLLM SIF + stand-in LoRA, llama.cpp gpt-oss-20b, single-node Slurm 25.11.2, nginx/valkey gateway side; install + verify steps per component |
+| [test-box.md](test-box.md) | Local RTX 3070 (8 GB) test box (2026-11-20): Rocky 9, NVIDIA driver, Apptainer 1.3.4, vLLM SIF + stand-in LoRA, llama.cpp gpt-oss-20b, single-node Slurm 25.11.2, nginx/valkey gateway side; install + verify steps per component |
 | [flask-gateway-and-security.md](flask-gateway-and-security.md) | vLLM endpoint exposure, security advisories, API-key design, SSE streaming through gunicorn/nginx, gateway placement, code sketch, checklist |
 
 ## Target architecture

@@ -1,4 +1,4 @@
-# Local test box for the cat-GPT deployment (RTX 3080 / i9-10900K / 64 GB)
+# Local test box for the cat-GPT deployment (RTX 3070 8 GB / i9-10900K / 64 GB)
 
 Compiled 2026-11-20. Versions, package names and commands below were checked that day against primary sources: vendor docs, the Rocky/EPEL/NVIDIA/nginx package repositories, PyPI, Docker Hub, the Hugging Face API, GitHub release assets, and the earlier notes in this folder. Claims are cited inline. "(my arithmetic)" marks derived numbers. `[INFERENCE]` marks conclusions no source states. **Uncertain**, **Conflict** and **Not checked** mark doubtful points.
 
@@ -10,20 +10,35 @@ The plan in [README.md](README.md) serves gpt-oss-120b with vLLM in Apptainer on
 
 | Can test here | Cannot test here |
 | --- | --- |
-| Flask gateway: HMAC keys, allowlist, quotas, metering, SSE through gunicorn and nginx | gpt-oss-120b itself: 65.25 GB of MXFP4 weights ([vllm-gpt-oss-120b.md §1](vllm-gpt-oss-120b.md#1-model-facts)) against 10 GB of VRAM |
-| `vllm serve` flags: `--uds`, `--api-key`, `--enable-lora`/`--lora-modules`, `--sse-keep-alive-interval`, under Apptainer `--nv -e` | gpt-oss-20b in vLLM: its safetensors total 13.76 GB (HF API, 2026-11-20), which is more than 10 GB |
+| Flask gateway: HMAC keys, allowlist, quotas, metering, SSE through gunicorn and nginx | gpt-oss-120b itself: 65.25 GB of MXFP4 weights ([vllm-gpt-oss-120b.md §1](vllm-gpt-oss-120b.md#1-model-facts)) against 8 GB of VRAM |
+| `vllm serve` flags: `--uds`, `--api-key`, `--enable-lora`/`--lora-modules`, `--sse-keep-alive-interval`, under Apptainer `--nv -e` | gpt-oss-20b in vLLM: its safetensors total 13.76 GB (HF API, 2026-11-20), which is more than 8 GB |
 | LoRA on Ampere. vLLM selects Marlin for MXFP4 MoE on Ampere ([vllm-gpt-oss-120b.md §3](vllm-gpt-oss-120b.md#3-hardware-and-kernel-support-in-vllm)), but a stand-in model tests only the LoRA plumbing, not that kernel | H200 throughput, Marlin vs Triton comparisons, BF16 vs MXFP4 eval scores ([README.md, Things to measure](README.md#things-to-measure-once-a-job-runs)) |
 | Harmony format, reasoning effort and `include_reasoning` on a real gpt-oss model (20b in llama.cpp, with MoE weights offloaded to RAM) | VACC networking, 48 h walltime enforcement in production, `/dev/shm` limits ([README.md, Blocking unknowns](README.md#blocking-unknowns-send-before-building)) |
 | sbatch scripts, 48 h relay jobs, requeue on a single-node Slurm | |
 | `ssh -L` tunnel from a TCP port to a vLLM Unix socket | |
+
+## As built (2026-11-20)
+
+Facts read off the box itself, which override any assumption above.
+
+- **GPU: RTX 3070 (LHR), 8 GB**, not the RTX 3080 originally assumed. PCI ID `10DE:2488`, sm_86. Everything in this note still applies, with 8 GB of VRAM instead of 10 GB.
+- **OS:** Rocky Linux 9.9 (Blue Onyx), kernel 5.14.0-741.22.1.el9_9. SELinux enforcing, cgroup v2, Secure Boot **disabled** (so the §0 signing question does not arise). Hostname `testbox`.
+- **FIPS was on after install.** It made sshd refuse ed25519 keys and offer no ed25519 host key. It was turned off with `sudo fips-mode-setup --disable` and a reboot. Check: `cat /proc/sys/crypto/fips_enabled` → `0`, `update-crypto-policies --show` → `DEFAULT`.
+- **Network:** Wi-Fi only (`wlp2s0`). The Minimal install leaves Wi-Fi "unmanaged" because it omits the Wi-Fi plugin. The fix is to install four RPMs from the install USB, mounted by label (`/dev/disk/by-label/Rocky-9-9-x86_64-dvd`), with `rpm -Uvh`: `NetworkManager-wifi`, `wpa_supplicant`, `wireless-regdb` and `iw`. The campus LAN address changes and is unreliable, so reach the box over **Tailscale** (`testbox`, 100.87.154.14).
+- **SSH from the laptop:** use the ECDSA key `~/.ssh/id_ecdsa_testbox` through the `Host testbox` entry in `~/.ssh/config`. The host key is ECDSA `SHA256:aRXOFCMvFfCOYBEzShttuGNpd5X3dyyDnI3oL4WuI4E`.
+- **Disks:**
+  - NVMe (Samsung 970 EVO 1 TB) on LVM: `/` is **70 GB**, `/home` is 829 GB, swap is 31 GB. Because `/` is small, the VACC tree lives at `/home/gpfs1`, with `/gpfs1` as a symlink to it.
+  - The Seagate ST4000DM004 4 TB (serial ZTT46PCX) is XFS, labelled `bulk`, mounted at `/bulk` by UUID with `nofail`.
+  - **Device names change between boots.** The Seagate was `sdb` before one reboot and `sda` after it. Always address disks by `/dev/disk/by-id/…` and re-check model and serial before writing to one.
+- **sudo:** a temporary `/etc/sudoers.d/90-setup` (NOPASSWD for ejorr) is in place during setup. **Delete it when setup is done.**
 
 ## Versions checked on 2026-11-20
 
 | Component | Pin on this box | Why this version | Source |
 | --- | --- | --- | --- |
 | OS | Rocky Linux 9 (repo tree is at 9.9) | RHEL 9 rebuild, the same family as VACC's RHEL 9.6 ([../vacc/software.md](../vacc/software.md)) | [dl.rockylinux.org/pub/rocky/](https://dl.rockylinux.org/pub/rocky/) |
-| NVIDIA driver | open kernel modules from the NVIDIA rhel9 repo, **≥ 580** (repo tops out at 620.70.06) | vLLM 0.33.0 images are CUDA 13 only and need R580+ ([README.md](README.md) decision 4). The 620.73.04 open-module README lists RTX 3080 device IDs 2206, 220A and 2216 | [CUDA rhel9 repo](https://developer.download.nvidia.com/compute/cuda/repos/rhel9/x86_64/); [open-gpu-kernel-modules 620.73.04 README](https://github.com/NVIDIA/open-gpu-kernel-modules/blob/620.73.04/README.md) |
-| CUDA toolkit (llama.cpp build only) | `cuda-toolkit-13-5` | CUDA 13 dropped only pre-Turing GPUs (Maxwell, Pascal, Volta). The 3080 is Ampere, sm_86 | [CUDA release notes](https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html) |
+| NVIDIA driver | open kernel modules from the NVIDIA rhel9 repo, **≥ 580** (repo tops out at 620.70.06) | vLLM 0.33.0 images are CUDA 13 only and need R580+ ([README.md](README.md) decision 4). The box's GPU is PCI ID 10DE:2488, "GeForce RTX 3070 Lite Hash Rate" in the PCI ID database. The 620.73.04 open-module README lists device 2488 as "NVIDIA GeForce RTX 3070" | [CUDA rhel9 repo](https://developer.download.nvidia.com/compute/cuda/repos/rhel9/x86_64/); [open-gpu-kernel-modules 620.73.04 README](https://github.com/NVIDIA/open-gpu-kernel-modules/blob/620.73.04/README.md) |
+| CUDA toolkit (llama.cpp build only) | `cuda-toolkit-13-5` | CUDA 13 dropped only pre-Turing GPUs (Maxwell, Pascal, Volta). The 3070 (GA104) is Ampere, sm_86 | [CUDA release notes](https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html) |
 | Apptainer | **1.3.4** (GitHub RPM) | Matches VACC ([../vacc/software.md](../vacc/software.md)). EPEL 9 metadata showed `1.6.0~rc.2` on 2026-11-20, so don't take it from EPEL | [v1.3.4 release assets](https://github.com/apptainer/apptainer/releases/tag/v1.3.4); [EPEL mdapi](https://mdapi.fedoraproject.org/epel9/pkg/apptainer) |
 | vLLM image | `vllm/vllm-openai:v0.33.0` | Same as the plan. **New:** vLLM **0.34.0** is now on PyPI and postdates the notes in this folder. Re-check the advisories before changing the pin | [Docker Hub tag](https://hub.docker.com/r/vllm/vllm-openai/tags); [PyPI](https://pypi.org/project/vllm/) |
 | Slurm | **25.11.2**, built from source as RPMs | Matches VACC ([../vacc/hardware.md](../vacc/hardware.md)). EPEL 9 ships only 22.05.11. The newest 25.11 patch is 25.11.9 | [download.schedmd.com/slurm](https://download.schedmd.com/slurm/); [EPEL mdapi](https://mdapi.fedoraproject.org/epel9/pkg/slurm) |
@@ -31,7 +46,7 @@ The plan in [README.md](README.md) serves gpt-oss-120b with vLLM in Apptainer on
 | Gateway libs | Flask 3.1.3, gunicorn 27.0.1, httpx 0.28.1, Flask-Limiter 4.1.1, openai 3.50.0 | Versions from [flask-gateway-and-security.md](flask-gateway-and-security.md). All still on PyPI. openai is now at 3.57.0 | PyPI JSON API |
 | nginx | nginx.org **mainline** repo (1.31.9 current) | Rocky AppStream tops out at 1.26.3, older than the 1.29.7 that defaults `proxy_http_version` to 1.1 ([flask-gateway-and-security.md §5](flask-gateway-and-security.md#5-streaming-sse-through-flask)) | [nginx linux packages](https://nginx.org/en/linux_packages.html); Rocky AppStream listing |
 | Rate-limit store | `valkey` 8.1 (Rocky AppStream). `redis` 6.2 is also there | Flask-Limiter's `memory://` store is dev-only ([flask-gateway-and-security.md](flask-gateway-and-security.md)) | Rocky AppStream listing |
-| Stand-in models | `Qwen/Qwen3-1.7B` (vLLM, LoRA ✅ in vLLM's model table). `ggml-org/gpt-oss-20b-GGUF`, `gpt-oss-20b-MXFP4.gguf` (12.11 GB) for llama.cpp | Small enough for 10 GB. 1.7 B × 2 B ≈ 3.4 GB of BF16 weights (my arithmetic) | [vLLM supported models v0.33.0](https://docs.vllm.ai/en/v0.33.0/models/supported_models/); HF API |
+| Stand-in models | `Qwen/Qwen3-1.7B` (vLLM, LoRA ✅ in vLLM's model table). `ggml-org/gpt-oss-20b-GGUF`, `gpt-oss-20b-MXFP4.gguf` (12.11 GB) for llama.cpp | Small enough for 8 GB. 1.7 B × 2 B ≈ 3.4 GB of BF16 weights (my arithmetic) | [vLLM supported models v0.33.0](https://docs.vllm.ai/en/v0.33.0/models/supported_models/); HF API |
 
 ## 0. OS: Rocky Linux 9
 
@@ -101,12 +116,12 @@ sudo dnf -y module enable nvidia-driver:open-dkms      # or pin a branch stream,
 sudo dnf -y install nvidia-driver-cuda kmod-nvidia-open-dkms   # "Compute-only (headless)" set
 sudo reboot
 ```
-- The open kernel modules support the 3080: the 620.73.04 README lists its device IDs.
+- The open kernel modules support this card: the 620.73.04 README lists device 2488 (RTX 3070).
 - To stop `dnf update` from jumping driver branches, see the guide's [version-locking](https://docs.nvidia.com/datacenter/tesla/driver-installation-guide/latest/version-locking.html) chapter. **Not checked** in detail.
 
 **Verify**
 ```bash
-nvidia-smi                       # shows "NVIDIA GeForce RTX 3080", Driver Version >= 580, CUDA Version 13.x
+nvidia-smi                       # shows "NVIDIA GeForce RTX 3070", Driver Version >= 580, CUDA Version 13.x
 nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv
 lsmod | grep nvidia              # nvidia, nvidia_uvm loaded
 ```
@@ -146,7 +161,7 @@ apptainer pull /gpfs1/pi/catgpt/containers/vllm-openai_v0.33.0.sif docker://vllm
 **Verify**
 ```bash
 ls -lh /gpfs1/pi/catgpt/containers/vllm-openai_v0.33.0.sif
-apptainer exec -e --nv /gpfs1/pi/catgpt/containers/vllm-openai_v0.33.0.sif nvidia-smi -L     # GPU 0: NVIDIA GeForce RTX 3080
+apptainer exec -e --nv /gpfs1/pi/catgpt/containers/vllm-openai_v0.33.0.sif nvidia-smi -L     # GPU 0: NVIDIA GeForce RTX 3070
 apptainer exec -e --nv /gpfs1/pi/catgpt/containers/vllm-openai_v0.33.0.sif vllm --version    # 0.33.0
 apptainer exec -e --nv /gpfs1/pi/catgpt/containers/vllm-openai_v0.33.0.sif \
   python3 -c "import torch;print(torch.cuda.is_available(), torch.cuda.get_device_capability())"  # True (8, 6)
@@ -187,7 +202,7 @@ conda config --show channels        # conda-forge only, no 'defaults'
 
 ## 6. Stand-in model and LoRA under vLLM
 
-**Why:** this exercises the exact production command shape on 10 GB: `--enable-lora --lora-modules catgpt=…`, `--uds` in a 0700 directory, `--api-key` as a gateway secret, and SSE keep-alives ([README.md](README.md) decisions 2–3).
+**Why:** this exercises the exact production command shape on 8 GB: `--enable-lora --lora-modules catgpt=…`, `--uds` in a 0700 directory, `--api-key` as a gateway secret, and SSE keep-alives ([README.md](README.md) decisions 2–3).
 
 **Install**
 ```bash
@@ -241,7 +256,7 @@ The last check should succeed without the key. That confirms why vLLM must never
 
 ## 7. gpt-oss-20b in llama.cpp (harmony format on a real gpt-oss model)
 
-**Why:** vLLM can't fit gpt-oss-20b in 10 GB. llama.cpp can keep MoE expert weights in system RAM (`--cpu-moe`, `--n-cpu-moe N`) ([llama-server README](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md)). VACC also has a `llama.cpp/b9077-cuda` module ([../vacc/software.md](../vacc/software.md)).
+**Why:** vLLM can't fit gpt-oss-20b in 8 GB. llama.cpp can keep MoE expert weights in system RAM (`--cpu-moe`, `--n-cpu-moe N`) ([llama-server README](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md)). VACC also has a `llama.cpp/b9077-cuda` module ([../vacc/software.md](../vacc/software.md)).
 
 **Install** (build from [llama.cpp docs/build.md, CUDA](https://github.com/ggml-org/llama.cpp/blob/master/docs/build.md#cuda))
 ```bash
@@ -263,7 +278,7 @@ cmake --build build --config Release -j 20
 
 **Verify**
 ```bash
-nvidia-smi --query-gpu=memory.used --format=csv     # under 10 GB
+nvidia-smi --query-gpu=memory.used --format=csv     # under 8 GB
 curl -s localhost:8081/v1/chat/completions -H 'Content-Type: application/json' \
   -d '{"messages":[{"role":"system","content":"Reasoning: low"},{"role":"user","content":"2+2?"}]}' | python -m json.tool
 # expect a final answer; check whether reasoning comes back in a separate field (reasoning_content) or inline
@@ -316,7 +331,7 @@ ProctrackType=proctrack/cgroup
 TaskPlugin=task/cgroup,task/affinity
 GresTypes=gpu
 # Paste the line from `slurmd -C` and add Gres/Features. 10900K = 10 cores / 20 threads.
-NodeName=testbox CPUs=20 Boards=1 SocketsPerBoard=1 CoresPerSocket=10 ThreadsPerCore=2 RealMemory=60000 Gres=gpu:1 Features=GPU_SKU:RTX3080
+NodeName=testbox CPUs=20 Boards=1 SocketsPerBoard=1 CoresPerSocket=10 ThreadsPerCore=2 RealMemory=60000 Gres=gpu:1 Features=GPU_SKU:RTX3070
 PartitionName=nvgpu Nodes=testbox Default=YES MaxTime=2-00:00:00 State=UP
 ```
 `/etc/slurm/gres.conf`: `AutoDetect=nvidia`
@@ -326,14 +341,14 @@ PartitionName=nvgpu Nodes=testbox Default=YES MaxTime=2-00:00:00 State=UP
 sudo systemctl enable --now slurmctld slurmd
 ```
 - `MaxTime=2-00:00:00` reproduces VACC's 48 h `nvgpu` cap.
-- VACC scripts use `--constraint=GPU_SKU:H200`. Override it here on the command line with `sbatch --constraint=GPU_SKU:RTX3080 job.sh`, since command-line options take precedence over `#SBATCH` lines.
+- VACC scripts use `--constraint=GPU_SKU:H200`. Override it here on the command line with `sbatch --constraint=GPU_SKU:RTX3070 job.sh`, since command-line options take precedence over `#SBATCH` lines.
 
 **Verify**
 ```bash
 munge -n | unmunge | grep STATUS           # Success (0)
 sinfo                                      # nvgpu up, testbox idle
 scontrol show node testbox | grep -i gres  # Gres=gpu:1
-srun --gpus=1 nvidia-smi -L                # GPU 0: NVIDIA GeForce RTX 3080
+srun --gpus=1 nvidia-smi -L                # GPU 0: NVIDIA GeForce RTX 3070
 srun --gpus=1 env | grep CUDA_VISIBLE      # CUDA_VISIBLE_DEVICES=0
 sbatch --time=49:00:00 --wrap 'true'       # must be rejected/pending for exceeding MaxTime
 # Relay test with minutes instead of hours:

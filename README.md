@@ -10,7 +10,7 @@ The part after the comma in that link is the room's encryption key. Anyone with 
 
 | Folder | Covers |
 | --- | --- |
-| [gpt-oss-deployment/](gpt-oss-deployment/README.md) | The deployment plan: vLLM + gpt-oss-120b sizing, the Flask gateway and its security, the architecture diagram ([architecture.excalidraw](gpt-oss-deployment/architecture.excalidraw), generated from [architecture.mmd](gpt-oss-deployment/architecture.mmd)), and the local RTX 3080 test box ([test-box.md](gpt-oss-deployment/test-box.md)) |
+| [gpt-oss-deployment/](gpt-oss-deployment/README.md) | The deployment plan: vLLM + gpt-oss-120b sizing, the Flask gateway and its security, the architecture diagram ([architecture.excalidraw](gpt-oss-deployment/architecture.excalidraw), generated from [architecture.mmd](gpt-oss-deployment/architecture.mmd)), and the local RTX 3070 test box ([test-box.md](gpt-oss-deployment/test-box.md)) |
 | [vacc/](vacc/README.md) | VACC: hardware, access and tiers, Slurm partitions, software, storage, and policy for serving an LLM |
 | [slurm/](slurm/README.md) | General Slurm reference pinned to 25.11.2 (VACC's version): commands, job scripts, GPUs, scheduling, accounting |
 
