@@ -24,12 +24,18 @@ Facts read off the box itself, which override any assumption above.
 - **GPU: RTX 3070 (LHR), 8 GB**, not the RTX 3080 originally assumed. PCI ID `10DE:2488`, sm_86. Everything in this note still applies, with 8 GB of VRAM instead of 10 GB.
 - **OS:** Rocky Linux 9.9 (Blue Onyx), kernel 5.14.0-741.22.1.el9_9. SELinux enforcing, cgroup v2, Secure Boot **disabled** (so the §0 signing question does not arise). Hostname `testbox`.
 - **FIPS was on after install.** It made sshd refuse ed25519 keys and offer no ed25519 host key. It was turned off with `sudo fips-mode-setup --disable` and a reboot. Check: `cat /proc/sys/crypto/fips_enabled` → `0`, `update-crypto-policies --show` → `DEFAULT`.
-- **Network:** Wi-Fi only (`wlp2s0`). The Minimal install leaves Wi-Fi "unmanaged" because it omits the Wi-Fi plugin. The fix is to install four RPMs from the install USB, mounted by label (`/dev/disk/by-label/Rocky-9-9-x86_64-dvd`), with `rpm -Uvh`: `NetworkManager-wifi`, `wpa_supplicant`, `wireless-regdb` and `iw`. The campus LAN address changes and is unreliable, so reach the box over **Tailscale** (`testbox`, 100.87.154.14).
+- **Network:** Wi-Fi only (`wlp2s0`). The Minimal install leaves Wi-Fi "unmanaged" because it omits the Wi-Fi plugin. The fix is to install four RPMs from the install USB, mounted by label (`/dev/disk/by-label/Rocky-9-9-x86_64-dvd`), with `rpm -Uvh`: `NetworkManager-wifi`, `wpa_supplicant`, `wireless-regdb` and `iw`. The campus LAN address changes and is unreliable, so reach the box over **Tailscale** (`testbox`, 100.87.154.14). Its campus address was 10.11.104.79. Key logins there failed because of FIPS (see above), not because the address belonged to another host.
 - **SSH from the laptop:** use the ECDSA key `~/.ssh/id_ecdsa_testbox` through the `Host testbox` entry in `~/.ssh/config`. The host key is ECDSA `SHA256:aRXOFCMvFfCOYBEzShttuGNpd5X3dyyDnI3oL4WuI4E`.
 - **Disks:**
   - NVMe (Samsung 970 EVO 1 TB) on LVM: `/` is **70 GB**, `/home` is 829 GB, swap is 31 GB. Because `/` is small, the VACC tree lives at `/home/gpfs1`, with `/gpfs1` as a symlink to it.
   - The Seagate ST4000DM004 4 TB (serial ZTT46PCX) is XFS, labelled `bulk`, mounted at `/bulk` by UUID with `nofail`.
   - **Device names change between boots.** The Seagate was `sdb` before one reboot and `sda` after it. Always address disks by `/dev/disk/by-id/…` and re-check model and serial before writing to one.
+- **Apptainer cannot see `/gpfs1` by default.** Apptainer binds only `$HOME` (`/home/ejorr`), not the rest of `/home`, so the `/gpfs1 → /home/gpfs1` symlink is broken inside the container, and vLLM fails with `LocalEntryNotFoundError` under `HF_HUB_OFFLINE=1`. Add `--bind /home/gpfs1:/gpfs1` to every `apptainer exec` on this box. The working launcher is `~/scratch/serve-qwen.sh`.
+- **§6 results on the 3070:**
+  - The vLLM 0.33.0 SIF is 8.4 GB. Inside it: torch 2.14.0+cu130, CUDA available, capability (8, 6).
+  - Qwen3-1.7B plus a rank-16 zero-init LoRA at `--gpu-memory-utilization 0.85` uses about 3.5 GiB for weights and leaves 1.72 GiB of KV cache, which is 16,096 tokens, or 1.96 concurrent 8k requests.
+  - Checks: `/v1/models` without the key → 401. With the key → `qwen3-base`, `catgpt`. A streamed `catgpt` request ends with a `usage` chunk. Nothing listens on TCP 8000. `/metrics` without the key → **200**, which confirms README decision 2.
+- **Section status (2026-11-20):** §0 to §6 done and verified. §1 uses `/etc/ssh/sshd_config.d/00-testbox.conf`. It must sort before `01-permitrootlogin.conf`, because sshd takes the first value it reads. Cockpit was removed from firewalld. §7 (llama.cpp), §8 (Slurm) and §9 (nginx, valkey, tunnel) are not started.
 - **sudo:** a temporary `/etc/sudoers.d/90-setup` (NOPASSWD for ejorr) is in place during setup. **Delete it when setup is done.**
 
 ## Versions checked on 2026-11-20
