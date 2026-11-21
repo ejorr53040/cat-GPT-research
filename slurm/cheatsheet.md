@@ -1,6 +1,6 @@
 # Slurm cheat sheet (25.11)
 
-Back to [README](README.md). Each line links to the page that owns it; the fuller notes are in the sibling files. All pages were accessed 2026-11-11. `<id>` stands for a job ID.
+Back to [README](README.md). Each line links to its source; fuller notes are in the sibling files. `<id>` stands for a job ID.
 
 ## Submit and run
 
@@ -71,11 +71,11 @@ Back to [README](README.md). Each line links to the page that owns it; the fulle
 12. **`~/.bashrc` is not sourced for srun tasks.** The submitting environment is exported, because `--export=ALL` is the default ([FAQ](https://slurm.schedmd.com/archive/slurm-25.11.2/faq.html); [sbatch](https://slurm.schedmd.com/archive/slurm-25.11.2/sbatch.html)).
 13. **Idle allocations get purged after `InactiveLimit`** if no step is active ([FAQ](https://slurm.schedmd.com/archive/slurm-25.11.2/faq.html)).
 14. **`SRUN_CPUS_PER_TASK` is obsolete advice.** It was needed only in 22.05/23.02. Since 23.11, srun reads `SLURM_CPUS_PER_TASK` again ([CHANGELOG 23.11](https://github.com/SchedMD/slurm/blob/slurm-25-11-2-1/CHANGELOG/slurm-23.11.md)).
-15. **Don't poll `squeue` or `sacct` in tight loops.** Every call is an RPC to slurmctld ([sshare](https://slurm.schedmd.com/archive/slurm-25.11.2/sshare.html) PERFORMANCE).
+15. **Polling `squeue` or `sacct` in tight loops loads slurmctld.** Every call is an RPC to slurmctld ([sshare](https://slurm.schedmd.com/archive/slurm-25.11.2/sshare.html) PERFORMANCE).
 
 ## Why is my job pending? (reason → action)
 
-Source: [Job Reason Codes](https://slurm.schedmd.com/archive/slurm-25.11.2/job_reason_codes.html). The "do" column is my reading of the definitions.
+Source: [Job Reason Codes](https://slurm.schedmd.com/archive/slurm-25.11.2/job_reason_codes.html). The "Do" column is inferred from the definitions.
 
 | Reason | Means | Do |
 | --- | --- | --- |

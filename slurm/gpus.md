@@ -1,6 +1,6 @@
 # GPUs: GRES, GPU options, CUDA_VISIBLE_DEVICES, MIG, MPS, sharding
 
-Back to [README](README.md). All pages were accessed 2026-11-11. Unless noted, the source is [Generic Resource (GRES) Scheduling, 25.11.2](https://slurm.schedmd.com/archive/slurm-25.11.2/gres.html).
+Back to [README](README.md). Unless noted, the source is [Generic Resource (GRES) Scheduling, 25.11.2](https://slurm.schedmd.com/archive/slurm-25.11.2/gres.html).
 
 ## How GPUs are modelled
 
@@ -56,7 +56,7 @@ Gotchas:
 
 ## MIG (Multi-Instance GPU)
 
-- Supported "beginning in version 21.08". Each MIG instance is treated as an individual GPU, with cgroup isolation and task binding.
+- Each MIG instance is treated as an individual GPU, with cgroup isolation and task binding.
 - Configure with `AutoDetect=nvml`, and give the MIG profile as a GRES type, e.g. `gpu:a100_3g.20gb:2`.
 - MIGs must be partitioned in advance. Slurm "does not support dynamic MIG partitioning".
 
@@ -82,13 +82,7 @@ Gotchas:
 
 - `--constraint` selects **nodes** by feature tags that the admin defines in `NodeName … Features=`. List them with `sinfo -o "%N %f"` or see them in `scontrol show node` ([sbatch(1)](https://slurm.schedmd.com/archive/slurm-25.11.2/sbatch.html); [sinfo(1)](https://slurm.schedmd.com/archive/slurm-25.11.2/sinfo.html)).
 - The GRES **type** in `--gpus=type:n` selects the GPU model directly.
-- Constraint syntax:
-  - `&` means AND.
-  - `|` means OR, and different nodes may match different options.
-  - `[a|b]` is matching OR: all nodes must share one option.
-  - Without parentheses the expression is parsed left to right.
-  - "Brackets are only reserved for Multiple Counts and Matching OR syntax."
-- `--prefer` gives soft features.
+- Constraint syntax (`&`, `|`, matching-OR `[a|b]`, counts, left-to-right parsing) and `--prefer`: see [job-scripts.md](job-scripts.md#resource-requests). `|` lets different nodes match different options; `[a|b]` requires all nodes to share one. "Brackets are only reserved for Multiple Counts and Matching OR syntax."
 
 **At VACC** ([vacc/slurm-and-jobs.md](../vacc/slurm-and-jobs.md#node-constraints---constraint---c)):
 - VACC selects GPU models with **node features** (`GPU_SKU:H200`, `GPU_MEM:80GB`, …) rather than GRES types. That is why its examples use `--gpus=N --constraint=…`.

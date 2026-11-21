@@ -1,6 +1,6 @@
 # Accounting, associations, QOS, limits, job states, reason codes
 
-Back to [README](README.md). All pages were accessed 2026-11-11 (Slurm 25.11.2 archive).
+Back to [README](README.md). Sources: Slurm 25.11.2 archive.
 
 ## Associations
 
@@ -104,7 +104,7 @@ From [TRES](https://slurm.schedmd.com/archive/slurm-25.11.2/tres.html) and [Mult
 - **TRES types:** BB, Billing, CPU, Energy, FS, GRES, IC, License, Mem, Node, Pages, VMem.
 - **Tracked by default:** Billing, CPU, Energy, Memory, Node, FS/Disk, Pages and VMem. Sites append others with `AccountingStorageTRES=gres/gpu,…`.
 - **Billing.** `TRESBillingWeights` (per partition) sets each job's **billing** TRES, and that value drives fairshare usage and billing limits. The default is `CPU=1`, so usage is allocated CPU-seconds. The page's example uses `TRESBillingWeights="CPU=1.0,Mem=0.25G,GRES/gpu=2.0"`. By default the weighted TRES are **summed**. `PriorityFlags=MAX_TRES` takes the per-node maximum instead, and `MAX_TRES_GRES` adds GPUs on top of that maximum.
-- The page's illustration of why billing exists: billing only CPUs, "if a job requests 1CPU and 64GB of memory on a 16CPU, 64GB node the job will only be billed for 1CPU when it really used the whole node".
+- Billing only CPUs under-counts memory-heavy jobs: "if a job requests 1CPU and 64GB of memory on a 16CPU, 64GB node the job will only be billed for 1CPU when it really used the whole node".
 
 At VACC: VACC's own billing unit is the CU, with 1 GPU-minute = 1 CU ([vacc/slurm-and-jobs.md](../vacc/slurm-and-jobs.md#node-constraints---constraint---c)). Whether CUs are computed from Slurm's billing TRES or from a separate script (`my_compute_usage`) is **unknown**. `sacct -X -j <id> -o jobid,alloctres%60` shows `billing=` for a job.
 

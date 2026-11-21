@@ -1,6 +1,6 @@
 # Job scripts, arrays, heterogeneous jobs, interactive jobs, MPI
 
-Back to [README](README.md). All pages were accessed 2026-11-11. Unless noted, quotes are from [sbatch(1) 25.11.2](https://slurm.schedmd.com/archive/slurm-25.11.2/sbatch.html).
+Back to [README](README.md). Unless noted, quotes are from [sbatch(1) 25.11.2](https://slurm.schedmd.com/archive/slurm-25.11.2/sbatch.html).
 
 ## `#SBATCH` directives
 
@@ -99,7 +99,7 @@ From sbatch(1) "OUTPUT ENVIRONMENT VARIABLES":
 - `scontrol update JobID=21845_2 …` changes a single task. Using the bare ArrayJobID changes all of them.
 - Pending reason `JobArrayTaskLimit`: the `%` throttle has been reached ([Job Reason Codes](https://slurm.schedmd.com/archive/slurm-25.11.2/job_reason_codes.html)).
 
-Illustrative script (my example, built from the options above):
+Example script (built from the options above):
 ```bash
 #!/bin/bash
 #SBATCH --job-name=sweep
@@ -110,11 +110,11 @@ Illustrative script (my example, built from the options above):
 python run.py --index "$SLURM_ARRAY_TASK_ID"
 ```
 
-At VACC: there is no VACC guidance on arrays, and VACC offers a `launcher` module as an alternative ([vacc/slurm-and-jobs.md](../vacc/slurm-and-jobs.md#job-arrays-and-many-small-tasks)). To find the real cap, run `scontrol show config | grep -i MaxArraySize`.
+At VACC: VACC docs give no array guidance and offer a `launcher` module as an alternative ([vacc/slurm-and-jobs.md](../vacc/slurm-and-jobs.md#job-arrays-and-many-small-tasks)). To find the real cap, run `scontrol show config | grep -i MaxArraySize`.
 
 ## Heterogeneous jobs ([Heterogeneous Job Support](https://slurm.schedmd.com/archive/slurm-25.11.2/heterogeneous_jobs.html))
 
-- Supported since 17.11. Each component can have its own partition, account, QOS and resources.
+- Each component can have its own partition, account, QOS and resources.
 - On the command line, separate components with `:`, e.g. `sbatch -c4 --mem-per-cpu=1 -n128 : -c1 --mem-per-cpu=16 -n1 my.bash`. In a script, use a line `#SBATCH hetjob` between component blocks.
 - Some options carry over to later components (`--job-name`, `--account`, `--dependency`…). Others reset (`--ntasks`, `--mem-per-cpu`).
 - Steps target components with `srun --het-group=0,1`. Accounting shows `<het_job_id>+<offset>`.
@@ -124,7 +124,7 @@ At VACC: there is no VACC guidance on arrays, and VACC offers a `launcher` modul
 ## Interactive jobs
 
 - `srun --pty bash` with resource options runs task 0 on a pseudo-terminal ([srun(1)](https://slurm.schedmd.com/archive/slurm-25.11.2/srun.html)).
-- `salloc` with `LaunchParameters=use_interactive_step` is "the recommended way" since 20.11 ([FAQ](https://slurm.schedmd.com/archive/slurm-25.11.2/faq.html)). See [commands.md](commands.md#salloc-man).
+- `salloc` with `LaunchParameters=use_interactive_step` is "the recommended way" ([FAQ](https://slurm.schedmd.com/archive/slurm-25.11.2/faq.html)). See [commands.md](commands.md#salloc-man).
 - Idle allocations can be purged after `InactiveLimit` seconds. A job is inactive "if it has no active job steps or if the srun command creating the job is not responding" ([FAQ](https://slurm.schedmd.com/archive/slurm-25.11.2/faq.html)).
 
 ## MPI and multi-node
@@ -166,11 +166,11 @@ From [srun(1)](https://slurm.schedmd.com/archive/slurm-25.11.2/srun.html):
 - Turn binding off with `--cpu-bind=none`. Set `SLURM_CPU_BIND=verbose` to see what was chosen.
 - Threaded tasks inherit the parent's CPU mask, so a multithreaded task should "specify or clear the CPU binding itself", or use fat masks.
 - `--gpu-bind` is the same as `--tres-bind=gres/gpu:…`. `--gpus-per-task` implies `--tres-bind=gres/gpu:per_task:<n>`.
-- The full explanation is in [CPU Management](https://slurm.schedmd.com/archive/slurm-25.11.2/cpu_management.html), which I did not read in depth.
+- Full reference: [CPU Management](https://slurm.schedmd.com/archive/slurm-25.11.2/cpu_management.html) (not covered in depth here).
 
 ## Exit codes ([Job Exit Codes](https://slurm.schedmd.com/archive/slurm-25.11.2/job_exit_code.html))
 
 - For sbatch the recorded exit code is the batch script's own exit code. Any non-zero code means state `FAILED` with reason `NonZeroExitCode`.
 - Codes are 0 to 255. If a signal ended the job, it is shown after a colon (`exit:signal`).
 - Each srun step's code is recorded separately.
-- Pitfall: a script whose last command succeeds shows `COMPLETED` even if an earlier step failed. Use `set -e` or check the per-step codes in `sacct`. **This is my inference** from "the exit code that is captured is the output of the batch script".
+- Pitfall: a script whose last command succeeds shows `COMPLETED` even if an earlier step failed. Use `set -e` or check the per-step codes in `sacct`. **Inference** from "the exit code that is captured is the output of the batch script".

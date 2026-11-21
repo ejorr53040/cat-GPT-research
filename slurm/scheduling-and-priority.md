@@ -1,6 +1,6 @@
 # Scheduling, priority, fairshare, preemption, reservations
 
-Back to [README](README.md). All pages were accessed 2026-11-11 (Slurm 25.11.2 archive).
+Back to [README](README.md). Sources: Slurm 25.11.2 archive.
 
 ## The main scheduler and backfill
 
@@ -9,8 +9,7 @@ From the [Scheduling Configuration Guide](https://slurm.schedmd.com/archive/slur
 - **Main loop.** Every `sched_interval` (default 60 s) the main loop considers all pending jobs. Both passes go strictly by priority: "once any job ... in a partition is left pending, no other jobs in that partition will be scheduled".
 - **Backfill** (`sched/backfill`, the default) "will start lower priority jobs if doing so does not delay the expected start time of any higher priority jobs".
   - It reserves resources for higher-priority jobs at their expected start times. Those expected starts are what `squeue --start` reports.
-  - "Reasonably accurate time limits are important for backfill scheduling to work well."
-  - The FAQ adds: "The most common problem is failing to set job time limits. If all jobs have the same time limit ... backfill will not be effective" ([FAQ](https://slurm.schedmd.com/archive/slurm-25.11.2/faq.html)).
+  - "Reasonably accurate time limits are important for backfill scheduling to work well." If all jobs have the same time limit, backfill is not effective ([FAQ](https://slurm.schedmd.com/archive/slurm-25.11.2/faq.html)).
 - **Backfill defaults (admin-tunable):**
   - `bf_interval=30` s
   - `bf_window=1440` min (one day). The guide says it should be "at least as long as the highest allowed time limit … to prevent job starvation".
@@ -51,7 +50,7 @@ Job_priority = site_factor
 
 - Each factor is a float from 0.0 to 1.0, and each weight is a 32-bit unsigned integer. Priority runs from 0 to 4294967295, and higher numbers are scheduled sooner.
 - **In 25.11 the default `PriorityType` is `priority/multifactor`, but every `PriorityWeight*` defaults to 0** ([slurm.conf](https://slurm.schedmd.com/archive/slurm-25.11.2/slurm.conf.html)). A site that set no weights gets roughly submit-order scheduling (**inference** from the formula plus the evaluation order).
-- The page advises weights of about 1000 or more, so that the factors keep useful precision.
+- Weights of about 1000 or more keep the factors' precision useful.
 
 | Factor | Meaning |
 | --- | --- |
@@ -77,7 +76,7 @@ What it is ([Multifactor](https://slurm.schedmd.com/archive/slurm-25.11.2/priori
 - Instead, under-serviced accounts go first and over-serviced ones run "when the machine would otherwise go idle".
 - Usage is counted in **allocated CPU-seconds** by default. Partitions can bill other TRES through `TRESBillingWeights` (see [accounting-and-limits.md](accounting-and-limits.md#tres-and-billing)).
 
-**Fair Tree (the default since 19.05)** ([Fair Tree](https://slurm.schedmd.com/archive/slurm-25.11.2/fair_tree.html)):
+**Fair Tree (the default)** ([Fair Tree](https://slurm.schedmd.com/archive/slurm-25.11.2/fair_tree.html)):
 - For each association, compute **Level Fairshare** against its siblings: `LF = S / U`.
   - `S` is the shares normalised among siblings.
   - `U` is the usage normalised among siblings.
@@ -142,7 +141,7 @@ Related settings:
 - **QOS `NoReserve`**: jobs in such a QOS make no backfill reservations. It is meant for "standby" QOS ([QOS](https://slurm.schedmd.com/archive/slurm-25.11.2/qos.html)).
 - **Order of victims:** the preemption list is ordered by QOS priority, by partition priority plus job size (smaller first), or youngest first with `youngest_first`.
 
-At VACC: `gpu-preempt` lets outside users borrow CRREL's H200s, and "outside jobs are cancelled" when CRREL needs them ([vacc/slurm-and-jobs.md](../vacc/slurm-and-jobs.md#partitions)). That fits `partition_prio` (the `goldenmaple` partition with a higher PriorityTier over `gpu-preempt`) or `preempt/qos`, with `CANCEL` or `REQUEUE`. **The real mode is unverified.** Check it with `scontrol show partition gpu-preempt`. If `GraceTime` is non-zero, a preempted job gets SIGTERM first, so jobs there should checkpoint and trap SIGTERM. That is general advice, not VACC guidance.
+At VACC: `gpu-preempt` lets outside users borrow CRREL's H200s, and "outside jobs are cancelled" when CRREL needs them ([vacc/slurm-and-jobs.md](../vacc/slurm-and-jobs.md#partitions)). That fits `partition_prio` (the `goldenmaple` partition with a higher PriorityTier over `gpu-preempt`) or `preempt/qos`, with `CANCEL` or `REQUEUE`. **The real mode is unverified.** Check it with `scontrol show partition gpu-preempt`. If `GraceTime` is non-zero, a preempted job gets SIGTERM before SIGKILL, which a job can trap to checkpoint.
 
 ## Reservations
 

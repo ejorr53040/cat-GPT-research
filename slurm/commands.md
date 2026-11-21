@@ -1,10 +1,10 @@
 # User commands
 
-Back to [README](README.md). All pages were accessed 2026-11-11. Man pages are the **25.11.2** archive: `https://slurm.schedmd.com/archive/slurm-25.11.2/<cmd>.html`.
+Back to [README](README.md). Man pages: `https://slurm.schedmd.com/archive/slurm-25.11.2/<cmd>.html`.
 
 General rule from the [FAQ](https://slurm.schedmd.com/archive/slurm-25.11.2/faq.html): srun treats everything after the first non-option token as the command and its arguments. `srun -N2 uptime -pdebug` passes `-pdebug` to `uptime`, so put srun options **before** the program.
 
-Several man pages carry a **PERFORMANCE** warning: do not call `sshare`, `squeue` and similar commands in tight shell loops, because each call is an RPC to slurmctld and enough of them can degrade it ([sshare(1)](https://slurm.schedmd.com/archive/slurm-25.11.2/sshare.html)).
+Several man pages carry a **PERFORMANCE** warning: each call to `sshare`, `squeue` and similar commands is an RPC to slurmctld, and calling them in tight shell loops can degrade it ([sshare(1)](https://slurm.schedmd.com/archive/slurm-25.11.2/sshare.html)).
 
 ## sbatch ([man](https://slurm.schedmd.com/archive/slurm-25.11.2/sbatch.html))
 
@@ -23,12 +23,12 @@ Several man pages carry a **PERFORMANCE** warning: do not call `sshare`, `squeue
 - `--overlap`: lets steps share CPUs, memory and GRES with other steps. By default parallel steps do not share.
 - `--mpi=pmix|pmi2|none|list`: see [job-scripts.md](job-scripts.md#mpi-and-multi-node).
 - `--cpu-bind`, `--gpu-bind` (≡ `--tres-bind=gres/gpu:…`), `-m/--distribution`: see [job-scripts.md](job-scripts.md#task-binding--affinity).
-- **(version-specific)** In 22.05, srun stopped inheriting `SLURM_CPUS_PER_TASK` and read `SRUN_CPUS_PER_TASK` instead. **23.11 reverted this**, going back to `SLURM_CPUS_PER_TASK` ([CHANGELOG 22.05](https://github.com/SchedMD/slurm/blob/slurm-25-11-2-1/CHANGELOG/slurm-22.05.md); [CHANGELOG 23.11](https://github.com/SchedMD/slurm/blob/slurm-25-11-2-1/CHANGELOG/slurm-23.11.md)). In 25.11, srun's input variable `SLURM_CPUS_PER_TASK` is "Same as -c", so srun inside an sbatch job with `--cpus-per-task` picks it up. Old site docs that tell you to export `SRUN_CPUS_PER_TASK` are 22.05/23.02-era advice.
+- **(version-specific)** In 22.05, srun stopped inheriting `SLURM_CPUS_PER_TASK` and read `SRUN_CPUS_PER_TASK` instead. **23.11 reverted this**, going back to `SLURM_CPUS_PER_TASK` ([CHANGELOG 22.05](https://github.com/SchedMD/slurm/blob/slurm-25-11-2-1/CHANGELOG/slurm-22.05.md); [CHANGELOG 23.11](https://github.com/SchedMD/slurm/blob/slurm-25-11-2-1/CHANGELOG/slurm-23.11.md)). In 25.11, srun's input variable `SLURM_CPUS_PER_TASK` is "Same as -c", so srun inside an sbatch job with `--cpus-per-task` picks it up. Exporting `SRUN_CPUS_PER_TASK` was needed only on 22.05/23.02.
 
 ## salloc ([man](https://slurm.schedmd.com/archive/slurm-25.11.2/salloc.html))
 
 - salloc gets an allocation, runs the given command (the user's default shell if none), and releases the allocation when the command exits.
-- **Where the shell runs depends on configuration.** Since 20.11 the recommended setup is `LaunchParameters=use_interactive_step`. That makes salloc start the shell on an allocated compute node "rather than locally to wherever salloc was invoked" ([slurm.conf(5)](https://slurm.schedmd.com/archive/slurm-25.11.2/slurm.conf.html); [FAQ](https://slurm.schedmd.com/archive/slurm-25.11.2/faq.html)). Without it, the shell stays on the login node and you use `srun` to reach the compute node. Check with `scontrol show config | grep LaunchParameters`.
+- **Where the shell runs depends on configuration.** The recommended setup is `LaunchParameters=use_interactive_step`. That makes salloc start the shell on an allocated compute node "rather than locally to wherever salloc was invoked" ([slurm.conf(5)](https://slurm.schedmd.com/archive/slurm-25.11.2/slurm.conf.html); [FAQ](https://slurm.schedmd.com/archive/slurm-25.11.2/faq.html)). Without it, the shell stays on the login node and you use `srun` to reach the compute node. Check with `scontrol show config | grep LaunchParameters`.
 
 ## squeue ([man](https://slurm.schedmd.com/archive/slurm-25.11.2/squeue.html))
 
@@ -84,8 +84,7 @@ Several man pages carry a **PERFORMANCE** warning: do not call `sshare`, `squeue
   - When an admin holds a job it is an admin-hold, which only an admin can release.
   - Holding a running job does not stop it.
 - `update JobId=<id> TimeLimit=…` and similar. You can use `TimeLimit+=30`.
-  - "Only a privileged user can increase a running or suspended job's TimeLimit."
-  - **Inference** from the "privileged" wording, not stated outright: a user can still lower their own job's limit.
+  - "Only a privileged user can increase a running or suspended job's TimeLimit." That a user can lower their own job's limit is **inference** from this wording.
 - `requeue <id>`: puts a batch job back into the pending state.
 - `top <id>`: moves your job ahead of your *own* similar jobs by adjusting nice values. It is "disabled by default for unprivileged users" unless `SchedulerParameters=enable_user_top`.
 - `write batch_script <id> [-]`: recovers the script of a job you own.
@@ -103,6 +102,6 @@ See [scheduling-and-priority.md](scheduling-and-priority.md#reading-your-priorit
 
 ## seff (contrib)
 
-- `contribs/seff/seff` is a Perl script, "Copyright 2015 Princeton University Research Computing", version 2.1. Usage is `seff [Options] <Jobid>` ([source](https://github.com/SchedMD/slurm/blob/slurm-25-11-2-1/contribs/seff/seff)).
+- `contribs/seff/seff` is a Perl script (version 2.1). Usage is `seff [Options] <Jobid>` ([source](https://github.com/SchedMD/slurm/blob/slurm-25-11-2-1/contribs/seff/seff)).
 - It ships in the **`slurm-contribs`** RPM, which obsoletes the old `slurm-seff` package ([slurm.spec](https://github.com/SchedMD/slurm/blob/slurm-25-11-2-1/slurm.spec)). It is not a core command, so a site may not install it.
 - At VACC: `seff` exists, and VACC also has `my_job_statistics` ([vacc/slurm-and-jobs.md](../vacc/slurm-and-jobs.md#vacc-helper-commands)).
