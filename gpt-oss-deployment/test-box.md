@@ -35,7 +35,27 @@ Facts read off the box itself, which override any assumption above.
   - The vLLM 0.33.0 SIF is 8.4 GB. Inside it: torch 2.14.0+cu130, CUDA available, capability (8, 6).
   - Qwen3-1.7B plus a rank-16 zero-init LoRA at `--gpu-memory-utilization 0.85` uses about 3.5 GiB for weights and leaves 1.72 GiB of KV cache, which is 16,096 tokens, or 1.96 concurrent 8k requests.
   - Checks: `/v1/models` without the key → 401. With the key → `qwen3-base`, `catgpt`. A streamed `catgpt` request ends with a `usage` chunk. Nothing listens on TCP 8000. `/metrics` without the key → **200**, which confirms README decision 2.
-- **Section status (2026-11-20):** §0 to §6 done and verified. §1 uses `/etc/ssh/sshd_config.d/00-testbox.conf`. It must sort before `01-permitrootlogin.conf`, because sshd takes the first value it reads. Cockpit was removed from firewalld. §7 (llama.cpp), §8 (Slurm) and §9 (nginx, valkey, tunnel) are not started.
+- **§7 results:**
+  - llama.cpp build `29b52d398`, with CUDA 13.5 and `-DCMAKE_CUDA_ARCHITECTURES=86`. The GGUF is 12,109,566,624 bytes, which matches the HF API.
+  - Speed and VRAM by setting: `--cpu-moe` uses 2.1 GB and gives 18.5 tok/s. `--n-cpu-moe 16` uses 5.3 GB and gives 25.6 tok/s. `--n-cpu-moe 12` uses **6.9 GB and gives 31.6 tok/s**, the best that fits. `--n-cpu-moe 8` doesn't fit.
+  - The launcher is `~/scratch/serve-gptoss20b.sh`.
+  - `Reasoning: low` and `Reasoning: high` both answered `391`. The reasoning comes back in a separate `reasoning_content` field.
+- **Stopping vLLM:** killing its tmux session leaves the `VLLM::EngineCore` child running and holding about 6.5 GB of VRAM. `kill -TERM` didn't stop it; `kill -KILL <pid>` did. Before starting anything else on the GPU, check with `nvidia-smi --query-compute-apps=pid,process_name --format=csv`.
+- **§8 results:**
+  - `rpmbuild -ta` also needs `mariadb-devel`, which isn't in the dependency list above. It's a hard BuildRequires in `slurm.spec`.
+  - SchedMD's download page lists checksums only for current releases. The 25.11.2 tarball was checked instead by `diff -rq` against the GitHub tag `slurm-25-11-2-1`: 0 differences.
+  - `slurmd -C` reports `Gres=gpu:nvidia_geforce_rtx_3070:1` and `RealMemory=63679`. slurm.conf uses that typed GRES with `RealMemory=60000` and `Features=GPU_SKU:RTX3070`.
+  - Checks: `srun --gpus=1 nvidia-smi -L` → RTX 3070. `CUDA_VISIBLE_DEVICES=0`. A job without `--gpus` gets "No devices found", so `ConstrainDevices` works. A 49 h job stays `PENDING (PartitionTimeLimit)`. An unknown feature (`GPU_SKU:H200`) is rejected. `--dependency=after:<id>+1` waited, then ran after the first job ended. There's no accounting database, so `sacct` doesn't work; use `scontrol show job`.
+- **§9 results:**
+  - nginx 1.31.9 is from the mainline repo. The repo key file holds **three** keys, and the package is signed by `8540 A6F1 8833 A80E 9C16 53A4 2FD2 1310 B49F 6B46` (signing-key-2, 2024). nginx.org's install page lists only the 2011 key `573B…BF62`. All three are listed in [NGINX's own docs](https://docs.nginx.com/nginx/admin-guide/installing-nginx/installing-nginx-open-source/).
+  - The config is `/etc/nginx/conf.d/catgpt.conf`, and the stock `default.conf` is disabled. It sets TLS (self-signed, SAN testbox, localhost, 127.0.0.1 and 100.87.154.14), `client_max_body_size 1m`, `limit_req` at 10 r/s with burst 20, `proxy_buffering off` and `proxy_read_timeout 300s`. Only `/v1/chat/completions` and `/v1/models` go upstream to 127.0.0.1:8080; everything else returns 404.
+  - The first start failed with `open() "/run/nginx.pid" failed (13)`. A plain restart fixed it, and the pid file has the label `httpd_var_run_t`.
+  - Checks: `/v1/models` → 502 (no gateway written yet). `/metrics` → 404, including from the laptop over Tailscale. Port 80 is closed. valkey answers `PONG`. `httpd_can_network_connect` is on.
+  - Tunnel: `ssh -N -L 127.0.0.1:18000:$HOME/vllm-sock/vllm.sock localhost` uses its own key `~/.ssh/id_ed25519_tunnel`, which is restricted in `authorized_keys` to `restrict,port-forwarding,command="/bin/false"` so it can forward but can't run commands. Through the tunnel: no key → 401, with key → `qwen3-base` and `catgpt`, and streaming works.
+- **Section status (2026-11-20):**
+  - §0 to §9 are installed and verified.
+  - §1 uses `/etc/ssh/sshd_config.d/00-testbox.conf`. It has to sort before `01-permitrootlogin.conf`, because sshd uses the first value it reads. Cockpit was removed from firewalld.
+  - **Not built yet:** the Flask gateway itself (gunicorn on 127.0.0.1:8080). The code sketch is in [flask-gateway-and-security.md §8](flask-gateway-and-security.md#8-reference-sketch-auth--streaming-proxy).
 - **sudo:** a temporary `/etc/sudoers.d/90-setup` (NOPASSWD for ejorr) is in place during setup. **Delete it when setup is done.**
 
 ## Versions checked on 2026-11-20
@@ -301,7 +321,7 @@ curl -s localhost:8081/v1/chat/completions -H 'Content-Type: application/json' \
 - `munge` is in AppStream, and `munge-devel` is in CRB.
 ```bash
 sudo dnf -y install rpm-build munge munge-devel pam-devel readline-devel hwloc-devel dbus-devel \
-                    libbpf-devel lua-devel perl-ExtUtils-MakeMaker python3 json-c-devel
+                    libbpf-devel lua-devel perl-ExtUtils-MakeMaker python3 json-c-devel mariadb-devel
 curl -LO https://download.schedmd.com/slurm/slurm-25.11.2.tar.bz2
 rpmbuild -ta slurm-25.11.2.tar.bz2              # if it stops on missing BuildRequires, dnf install what it names
 cd ~/rpmbuild/RPMS/x86_64
@@ -392,7 +412,7 @@ gpgkey=https://nginx.org/keys/nginx_signing.key
 module_hotfixes=true
 EOF
 sudo dnf config-manager --set-enabled nginx-mainline
-sudo dnf -y install nginx      # accept key only if fingerprint is 573B FD6B 3D8F BC64 1079 A6AB ABF5 BD82 7BD9 BF62
+sudo dnf -y install nginx      # three keys are imported; accept only 8540…B49F6B46, 573B…7BD9BF62, 9E9B…8D88A2B3 (docs.nginx.com)
 
 # Self-signed TLS for testing
 sudo mkdir -p /etc/nginx/tls
